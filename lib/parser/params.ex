@@ -4,11 +4,22 @@ defmodule VCard.Parser.Params do
   import VCard.Parser.Core
   import VCard.Parser.Types
 
-  NimbleCSV.define VCard.Parser.Params.Splitter, separator: ",", escape: "\""
+  NimbleCSV.define(VCard.Parser.Params.Splitter, separator: ",", escape: "\"")
   alias VCard.Parser.Params.Splitter
 
-  @all_param_types [:language, :value, :pref, :pid, :type, :geo, :tz,
-    :sort_as, :calscale, :encoding, :any]
+  @all_param_types [
+    :language,
+    :value,
+    :pref,
+    :pid,
+    :type,
+    :geo,
+    :tz,
+    :sort_as,
+    :calscale,
+    :encoding,
+    :any
+  ]
 
   # Generates a `choice/2` parser for the desired
   # parameters
@@ -107,13 +118,13 @@ defmodule VCard.Parser.Params do
     list
     |> Enum.group_by(fn {k, _v} -> k end, fn {_k, v} -> v end)
     |> Map.new(fn {x, y} ->
-         case List.flatten(y) do
-           [one] -> {x, one}
-           other -> {x, other}
-         end
-       end)
+      case List.flatten(y) do
+        [one] -> {x, one}
+        other -> {x, other}
+      end
+    end)
     |> Enum.map(&downcase/1)
-    |> Map.new
+    |> Map.new()
   end
 
   def downcase(list) when is_list(list) do
@@ -134,11 +145,10 @@ defmodule VCard.Parser.Params do
 
   def split_at_commas(list) do
     Splitter.parse_enumerable(["" | list])
-    |> List.flatten
+    |> List.flatten()
   end
 
   def reduce_param([key | values]) do
     {String.downcase(key), unescape(values)}
   end
-
 end

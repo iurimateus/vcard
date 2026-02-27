@@ -26,7 +26,6 @@ defmodule VCard do
   in `params` and `group`.
   """
   def get(vcard, key, params) do
-
   end
 
   @spec get_all(t, key) :: [value]
@@ -43,7 +42,7 @@ defmodule VCard do
   def count(vcard, key) when is_list(vcard) do
     vcard
     |> get_all(key)
-    |> Enum.count
+    |> Enum.count()
   end
 
   def cardinality(vcard) do
@@ -55,5 +54,4 @@ defmodule VCard do
   def group(vcard) when is_list(vcard) do
     Enum.group_by(vcard, fn {_property, args} -> Keyword.get(args, :group) end)
   end
-
 end

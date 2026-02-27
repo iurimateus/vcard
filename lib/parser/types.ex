@@ -4,8 +4,8 @@ defmodule VCard.Parser.Types do
 
   def version_as_float(args) do
     args
-    |> Enum.join
-    |> String.to_float
+    |> Enum.join()
+    |> String.to_float()
   end
 
   #      year   = 4DIGIT  ; 0000-9999
@@ -77,7 +77,11 @@ defmodule VCard.Parser.Types do
   #
   def date do
     choice([
-      year() |> ignore(ascii_char([?-])) |> concat(month()) |> ignore(ascii_char([?-])) |> concat(day()),
+      year()
+      |> ignore(ascii_char([?-]))
+      |> concat(month())
+      |> ignore(ascii_char([?-]))
+      |> concat(day()),
       year() |> optional(month() |> concat(day())),
       year() |> ignore(ascii_char([?-])) |> concat(month()),
       ignore(string("---")) |> concat(day()),
@@ -233,7 +237,7 @@ defmodule VCard.Parser.Types do
       anycase_string("iphone"),
       anycase_string("main"),
       anycase_string("other"),
-      x_name(),
+      x_name()
     ])
     |> label("a valid tel type")
   end

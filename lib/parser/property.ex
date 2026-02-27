@@ -171,13 +171,17 @@ defmodule VCard.Parser.Property do
   def kind do
     optional(params([:value, :any]))
     |> ignore(colon())
-    |> concat(choice([
+    |> concat(
+      choice([
         anycase_string("individual"),
         anycase_string("group"),
         anycase_string("org"),
         anycase_string("location"),
         x_name()
-     ]) |> unwrap_and_tag(:value) |> label("a individual, group, org, location or an x- name"))
+      ])
+      |> unwrap_and_tag(:value)
+      |> label("a individual, group, org, location or an x- name")
+    )
   end
 
   # 6.1.5.  XML
@@ -792,10 +796,11 @@ defmodule VCard.Parser.Property do
   def tz do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(choice([
+    |> concat(
+      choice([
         utc_offset() |> tag(:value),
         text() |> unwrap_and_tag(:value)
-       ])
+      ])
     )
     |> label("a timezone as a zone name or offset")
   end
@@ -825,8 +830,10 @@ defmodule VCard.Parser.Property do
   def geo do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a geo as a uri")
   end
 
@@ -855,8 +862,10 @@ defmodule VCard.Parser.Property do
   def title do
     optional(params([:value, :type, :language, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(text()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      text()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a title as text")
   end
 
@@ -888,8 +897,10 @@ defmodule VCard.Parser.Property do
   def role do
     optional(params([:value, :type, :language, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(text()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      text()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a role as text")
   end
 
@@ -920,8 +931,10 @@ defmodule VCard.Parser.Property do
   def logo do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a logo uri")
   end
 
@@ -957,9 +970,11 @@ defmodule VCard.Parser.Property do
   def org do
     optional(params([:value, :type, :sort_as, :language, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(component()
-    |> repeat(ignore(semicolon()) |> concat(component()))
-    |> tag(:value))
+    |> concat(
+      component()
+      |> repeat(ignore(semicolon()) |> concat(component()))
+      |> tag(:value)
+    )
     |> label("a semicolon separated list of organization components")
   end
 
@@ -1015,8 +1030,10 @@ defmodule VCard.Parser.Property do
   def member do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a member represented as a uri")
   end
 
@@ -1074,11 +1091,13 @@ defmodule VCard.Parser.Property do
   def related do
     optional(params([:value, :type, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(choice([
+    |> concat(
+      choice([
         uri(),
         text()
       ])
-    |> unwrap_and_tag(:value))
+      |> unwrap_and_tag(:value)
+    )
     |> label("a uri to a text value")
   end
 
@@ -1107,8 +1126,10 @@ defmodule VCard.Parser.Property do
   def categories do
     optional(params([:value, :type, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(text_list()
-    |> tag(:value))
+    |> concat(
+      text_list()
+      |> tag(:value)
+    )
     |> label("a comma-separated list of categories")
   end
 
@@ -1138,8 +1159,10 @@ defmodule VCard.Parser.Property do
   def note do
     optional(params([:value, :type, :language, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(text()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      text()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a text note")
   end
 
@@ -1228,8 +1251,10 @@ defmodule VCard.Parser.Property do
   def sound do
     optional(params([:value, :type, :mediatype, :language, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
   end
 
   # 6.7.6.  UID
@@ -1374,7 +1399,7 @@ defmodule VCard.Parser.Property do
   def version_number do
     digit()
     |> ascii_char([?.])
-    |> concat(digit() )
+    |> concat(digit())
     |> reduce({List, :to_string, []})
     |> unwrap_and_tag(:value)
     |> label("a version number")
@@ -1417,8 +1442,10 @@ defmodule VCard.Parser.Property do
   def key do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(choice([uri(), text()])
-    |> unwrap_and_tag(:value))
+    |> concat(
+      choice([uri(), text()])
+      |> unwrap_and_tag(:value)
+    )
     |> label("a key uri")
   end
 
@@ -1453,8 +1480,10 @@ defmodule VCard.Parser.Property do
   def fburl do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a fburl uri")
   end
 
@@ -1486,8 +1515,10 @@ defmodule VCard.Parser.Property do
   def caladruri do
     optional(params([:value, :type, :mediatype, :altid, :pid, :pref, :any]))
     |> ignore(colon())
-    |> concat(uri()
-    |> unwrap_and_tag(:value))
+    |> concat(
+      uri()
+      |> unwrap_and_tag(:value)
+    )
     |> label("a caladruri")
   end
 
@@ -1537,5 +1568,4 @@ defmodule VCard.Parser.Property do
     |> concat(text() |> unwrap_and_tag(:value))
     |> label("an x- prefix property")
   end
-
 end

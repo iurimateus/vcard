@@ -67,7 +67,7 @@ defmodule VCard.Parser.ParamValues do
       anycase_string("utc-offset"),
       anycase_string("language-tag"),
       anycase_string("x-name"),
-      anycase_string("iana-token"),
+      anycase_string("iana-token")
     ])
   end
 
@@ -366,7 +366,7 @@ defmodule VCard.Parser.ParamValues do
     choice([
       ignore(dquote()) |> concat(utc_offset()) |> ignore(dquote()),
       text()
-     ])
+    ])
   end
 
   def param_value(:uri) do

@@ -22,10 +22,15 @@ defmodule VCard.Parser.Cardinality do
   @doc false
   def valid?(property, count) do
     valid_range = cardinality(property)
+
     case cardinality_valid?(count, valid_range) do
-      true -> :ok
-      false -> {:error, "Invalid cardinality for #{inspect property}. " <>
-                        "Valid cardinality is #{inspect valid_range}"}
+      true ->
+        :ok
+
+      false ->
+        {:error,
+         "Invalid cardinality for #{inspect(property)}. " <>
+           "Valid cardinality is #{inspect(valid_range)}"}
     end
   end
 

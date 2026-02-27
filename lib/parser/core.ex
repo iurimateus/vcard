@@ -1,8 +1,8 @@
 defmodule VCard.Parser.Core do
   import NimbleParsec
 
-  @cr 0x0d
-  @lf 0x0a
+  @cr 0x0D
+  @lf 0x0A
 
   # Allow NL line ends for simpler compatibility
   def crlf do
@@ -80,22 +80,22 @@ defmodule VCard.Parser.Core do
 
   def anycase_string(string) do
     string
-    |> String.upcase
-    |> String.to_charlist
-    |> Enum.reverse
-    |> char_piper
+    |> String.upcase()
+    |> String.to_charlist()
+    |> Enum.reverse()
+    |> char_piper()
     |> reduce({List, :to_string, []})
   end
 
   defp char_piper([c]) when c in ?A..?Z do
     c
-    |> both_cases
-    |> ascii_char
+    |> both_cases()
+    |> ascii_char()
   end
 
   defp char_piper([c | rest]) when c in ?A..?Z do
     rest
-    |> char_piper
+    |> char_piper()
     |> ascii_char(both_cases(c))
   end
 
@@ -126,7 +126,7 @@ defmodule VCard.Parser.Core do
     choice([
       non_ascii(),
       utf8_char([160]),
-      ascii_char([0x20, 0x09, ?!, 0x23..0x39, 0x3c..0x7e])
+      ascii_char([0x20, 0x09, ?!, 0x23..0x39, 0x3C..0x7E])
     ])
     |> times(min: 1)
     |> reduce({List, :to_string, []})
@@ -137,7 +137,7 @@ defmodule VCard.Parser.Core do
   def qsafe_string do
     choice([
       non_ascii(),
-      ascii_char([0x20, 0x09, ?!, 0x23..0x7e])
+      ascii_char([0x20, 0x09, ?!, 0x23..0x7E])
     ])
     |> times(min: 1)
     |> reduce({List, :to_string, []})
@@ -156,8 +156,11 @@ defmodule VCard.Parser.Core do
 
   def convert_utf8(args) do
     args
-    |> Enum.map(fn x -> {y, ""} = Integer.parse(x, 16); y end)
-    |> List.to_string
+    |> Enum.map(fn x ->
+      {y, ""} = Integer.parse(x, 16)
+      y
+    end)
+    |> List.to_string()
   end
 
   def text_list do
@@ -170,8 +173,8 @@ defmodule VCard.Parser.Core do
   # TEXT-CHAR = "\\" / "\," / "\n" / WSP / NON-ASCII
   #           / %x21-2B / %x2D-5B / %x5D-7E
   #    ; Backslashes, commas, and newlines must be encoded.
-  @unescaped_char [0x20, 0x09, 0x21..0x2b, 0x2d..0x5b, 0x5d..0x7e]
-  @escaped_char [?\\, ?,, 0x0d]
+  @unescaped_char [0x20, 0x09, 0x21..0x2B, 0x2D..0x5B, 0x5D..0x7E]
+  @escaped_char [?\\, ?,, 0x0D]
   @others [160]
 
   def text do
@@ -179,7 +182,7 @@ defmodule VCard.Parser.Core do
       non_ascii(),
       utf8_char(@others),
       ascii_char([?\\]) |> ascii_char(@escaped_char ++ @unescaped_char),
-      ascii_char(@unescaped_char),
+      ascii_char(@unescaped_char)
     ])
     |> repeat
     |> reduce({List, :to_string, []})
@@ -188,14 +191,14 @@ defmodule VCard.Parser.Core do
 
   # component = "\\" / "\," / "\;" / "\n" / WSP / NON-ASCII
   #           / %x21-2B / %x2D-3A / %x3C-5B / %x5D-7E
-  @unescaped_component [0x20, 0x09, 0x21..0x2b, 0x2d..0x3a, 0x3c..0x5b, 0x5d..0x7e]
-  @escaped_component [?\\, ?,, ?;, 0x0d]
+  @unescaped_component [0x20, 0x09, 0x21..0x2B, 0x2D..0x3A, 0x3C..0x5B, 0x5D..0x7E]
+  @escaped_component [?\\, ?,, ?;, 0x0D]
 
   def component do
     choice([
       utf8_char(@others),
       ascii_char([?\\]) |> ascii_char(@escaped_component),
-      ascii_char(@unescaped_component),
+      ascii_char(@unescaped_component)
     ])
     |> repeat
     |> reduce({List, :to_string, []})
@@ -226,18 +229,19 @@ defmodule VCard.Parser.Core do
   end
 
   def unescape(""), do: ""
-  def unescape(<< "\\n", rest :: binary >>),  do: "\n" <> unescape(rest)
-  def unescape(<< "\\r", rest :: binary >>),  do: "\r" <> unescape(rest)
-  def unescape(<< "\\,", rest :: binary >>),  do: "," <> unescape(rest)
-  def unescape(<< "\\;", rest :: binary >>),  do: ";" <> unescape(rest)
-  def unescape(<< "\\\\", rest :: binary >>), do: "\\" <> unescape(rest)
+  def unescape(<<"\\n", rest::binary>>), do: "\n" <> unescape(rest)
+  def unescape(<<"\\r", rest::binary>>), do: "\r" <> unescape(rest)
+  def unescape(<<"\\,", rest::binary>>), do: "," <> unescape(rest)
+  def unescape(<<"\\;", rest::binary>>), do: ";" <> unescape(rest)
+  def unescape(<<"\\\\", rest::binary>>), do: "\\" <> unescape(rest)
 
   # Apple address book annotations
-  def unescape(<< "_$!<", rest :: binary >>), do: unescape(rest)
-  def unescape(<< ">!$_" >>), do: ""
+  def unescape(<<"_$!<", rest::binary>>), do: unescape(rest)
+  def unescape(<<">!$_">>), do: ""
 
-  def unescape(<< "\\", c :: binary-size(1), rest :: binary >>), do: c <> unescape(rest)
-  def unescape(<< c :: binary-size(1), rest :: binary>>), do: c <> unescape(rest)
+  def unescape(<<"\\", c::binary-size(1), rest::binary>>), do: c <> unescape(rest)
+  def unescape(<<c::binary-size(1), rest::binary>>), do: c <> unescape(rest)
+
   def unescape(values) do
     values
   end

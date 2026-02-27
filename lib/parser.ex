@@ -11,6 +11,7 @@ defmodule VCard.Parser do
   end
 
   @folder Regex.compile!("\r?\n[ \t]")
+
   defp unfold(vcard_text) when is_binary(vcard_text) do
     String.replace(vcard_text, @folder, "")
   end
@@ -22,8 +23,9 @@ defmodule VCard.Parser do
     do: {:ok, acc, rest}
 
   defp unwrap({:error, reason, rest, _, {line, _}, _offset}) do
-    {:error, {VCard.Parser.ParseError,
-      "#{reason}. Detected on line #{inspect line} at #{inspect(rest, printable_limit: 30)}"}}
+    {:error,
+     {VCard.Parser.ParseError,
+      "#{reason}. Detected on line #{inspect(line)} at #{inspect(rest, printable_limit: 30)}"}}
   end
 
   # parsec:VCard.Parser
@@ -31,21 +33,28 @@ defmodule VCard.Parser do
   import NimbleParsec
   import VCard.Parser.{Grammar, Core, Params, Types}
 
-  defparsec :parse_vcard,
+  defparsec(
+    :parse_vcard,
     begin_line()
     |> repeat(content_line())
     |> concat(end_line())
     |> wrap
+  )
 
-  defparsec :property,
+  defparsec(
+    :property,
     content_line()
+  )
 
-  defparsec :text,
+  defparsec(
+    :text,
     text()
+  )
 
-  defparsec :type,
+  defparsec(
+    :type,
     type_code()
+  )
 
   # parsec:VCard.Parser
-
 end
