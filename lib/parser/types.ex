@@ -8,197 +8,151 @@ defmodule VCard.Parser.Types do
     |> String.to_float()
   end
 
-  #      year   = 4DIGIT  ; 0000-9999
-  #      month  = 2DIGIT  ; 01-12
-  #      day    = 2DIGIT  ; 01-28/29/30/31 depending on month and leap year
-  #      hour   = 2DIGIT  ; 00-23
-  #      minute = 2DIGIT  ; 00-59
-  #      second = 2DIGIT  ; 00-58/59/60 depending on leap second
-  #      zone   = utc-designator / utc-offset
-  #      utc-designator = %x5A  ; uppercase "Z"
-  #      utc-offset = sign hour [minute]
-  def year do
-    integer(4) |> unwrap_and_tag(:year)
+  # Helper combinators used internally - these are plain def functions
+  # available to other modules but NOT callable from defparsec in this module.
+  def year, do: integer(4) |> unwrap_and_tag(:year)
+  def month, do: integer(2) |> unwrap_and_tag(:month)
+  def day, do: integer(2) |> unwrap_and_tag(:day)
+  def hour, do: integer(2) |> unwrap_and_tag(:hour)
+  def minute, do: integer(2) |> unwrap_and_tag(:minute)
+  def second, do: integer(2) |> unwrap_and_tag(:second)
+  def utc_designator, do: ascii_char([?Z])
+  def time_designator, do: ascii_char([?T])
+
+  def scheme do
+    ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-], min: 1)
+    |> label("a URI scheme")
   end
 
-  def month do
-    integer(2) |> unwrap_and_tag(:month)
-  end
+  def iana_token, do: alphanum_and_dash()
 
-  def day do
-    integer(2) |> unwrap_and_tag(:day)
-  end
+  # ---- Inline helper expressions for use in defparsec ----
+  # Since defparsec runs at module scope, we can't call our own def functions.
+  # We use module attributes and inline expressions instead.
 
-  def hour do
-    integer(2) |> unwrap_and_tag(:hour)
-  end
+  @year_c integer(4) |> unwrap_and_tag(:year)
+  @month_c integer(2) |> unwrap_and_tag(:month)
+  @day_c integer(2) |> unwrap_and_tag(:day)
+  @hour_c integer(2) |> unwrap_and_tag(:hour)
+  @minute_c integer(2) |> unwrap_and_tag(:minute)
+  @second_c integer(2) |> unwrap_and_tag(:second)
+  @utc_designator_c ascii_char([?Z])
+  @period_c ascii_char([?.])
+  @digit_c ascii_char([?0..?9])
+  @semicolon_c ascii_char([?;]) |> label("a semicolon")
+  @equals_c ascii_char([?=]) |> label("an equals sign")
+  @alphanumeric_c ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
+                  |> label("an alphanumeric character")
+  @alphanum_and_dash_c ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-], min: 1)
+                       |> label("an alphanumeric character or a dash")
+  @alphabetic_c ascii_string([?a..?z, ?A..?Z], min: 1) |> label("an alphabetic character")
 
-  def minute do
-    integer(2) |> unwrap_and_tag(:minute)
-  end
-
-  def second do
-    integer(2) |> unwrap_and_tag(:second)
-  end
-
-  def utc_designator do
-    ascii_char([?Z])
-  end
-
-  def utc_offset do
+  # utc-offset = sign hour [minute]
+  defparsec(
+    :utc_offset_parsec,
     ascii_char([?+, ?-])
-    |> concat(hour())
-    |> concat(minute())
-    |> post_traverse(:calculate_direction)
-  end
+    |> concat(@hour_c)
+    |> concat(@minute_c)
+    |> post_traverse(:calculate_direction),
+    export_combinator: true
+  )
 
-  def calculate_direction(_rest, [{:minute, minutes}, {:hour, hours}, ?+], context, _, _) do
-    {[{:tz_minute_offset, minutes}, {:tz_hour_offset, hours}], context}
-  end
+  # zone = utc-designator / utc-offset
+  @zone_c choice([@utc_designator_c, parsec({__MODULE__, :utc_offset_parsec})])
 
-  def calculate_direction(_rest, [{:minute, minutes}, {:hour, hours}, ?-], context, _, _) do
-    {[{:tz_minute_offset, minutes}, {:tz_hour_offset, hours * -1}], context}
-  end
-
-  def zone do
-    choice([utc_designator(), utc_offset()])
-  end
-
-  #      date          = year    [month  day]
-  #                    / year "-" month
-  #                    / "--"     month [day]
-  #                    / "--"      "-"   day
-  #      date-noreduc  = year     month  day
-  #                    / "--"     month  day
-  #                    / "--"      "-"   day
-  #      date-complete = year     month  day
-  #
-  # Also allow Version 3 dates where of the form yyyy-mm-dd
-  #
-  def date do
+  # date
+  defparsec(
+    :date_parsec,
     choice([
-      year()
+      @year_c
       |> ignore(ascii_char([?-]))
-      |> concat(month())
+      |> concat(@month_c)
       |> ignore(ascii_char([?-]))
-      |> concat(day()),
-      year() |> optional(month() |> concat(day())),
-      year() |> ignore(ascii_char([?-])) |> concat(month()),
-      ignore(string("---")) |> concat(day()),
-      ignore(string("--")) |> concat(month()) |> optional(day())
-    ])
-  end
+      |> concat(@day_c),
+      @year_c |> optional(@month_c |> concat(@day_c)),
+      @year_c |> ignore(ascii_char([?-])) |> concat(@month_c),
+      ignore(string("---")) |> concat(@day_c),
+      ignore(string("--")) |> concat(@month_c) |> optional(@day_c)
+    ]),
+    export_combinator: true
+  )
 
-  def date_noreduc do
+  @date_noreduc_c choice([
+                    @year_c |> concat(@month_c) |> concat(@day_c),
+                    ignore(string("---")) |> concat(@day_c),
+                    ignore(string("--")) |> concat(@month_c) |> concat(@day_c)
+                  ])
+  @date_complete_c @year_c |> concat(@month_c) |> concat(@day_c)
+
+  @time_c choice([
+            @hour_c |> optional(@minute_c |> optional(@second_c)) |> optional(@zone_c),
+            ignore(ascii_char([?-]))
+            |> concat(@minute_c)
+            |> optional(@second_c)
+            |> optional(@zone_c),
+            ignore(string("--")) |> concat(@second_c) |> optional(@zone_c)
+          ])
+
+  @time_notrunc_c @hour_c |> optional(@minute_c |> optional(@second_c)) |> optional(@zone_c)
+  @time_complete_c @hour_c |> concat(@minute_c) |> concat(@second_c) |> optional(@zone_c)
+  @time_designator_c ascii_char([?T])
+
+  @date_time_c @date_noreduc_c |> ignore(@time_designator_c) |> concat(@time_notrunc_c)
+
+  # timestamp
+  defparsec(
+    :timestamp_parsec,
+    @date_complete_c |> ignore(@time_designator_c) |> concat(@time_complete_c),
+    export_combinator: true
+  )
+
+  # date-and-or-time
+  defparsec(
+    :date_and_or_time_parsec,
     choice([
-      year() |> concat(month()) |> concat(day()),
-      ignore(string("---")) |> concat(day()),
-      ignore(string("--")) |> concat(month()) |> concat(day())
-    ])
-  end
+      @date_time_c,
+      parsec({__MODULE__, :date_parsec}),
+      ignore(@time_designator_c) |> concat(@time_c)
+    ]),
+    export_combinator: true
+  )
 
-  def date_complete do
-    year() |> concat(month()) |> concat(day())
-  end
+  # pid
+  defparsec(
+    :pid_parsec,
+    @digit_c |> optional(@period_c |> concat(@digit_c)),
+    export_combinator: true
+  )
 
-  #      time          = hour [minute [second]] [zone]
-  #                    /  "-"  minute [second]  [zone]
-  #                    /  "-"   "-"    second   [zone]
-  def time do
-    choice([
-      hour() |> optional(minute() |> optional(second())) |> optional(zone()),
-      ignore(ascii_char([?-])) |> concat(minute()) |> optional(second()) |> optional(zone()),
-      ignore(string("--")) |> concat(second()) |> optional(zone())
-    ])
-  end
-
-  #      time-notrunc  = hour [minute [second]] [zone]
-  #      time-complete = hour  minute  second   [zone]
-  #      time-designator = %x54  ; uppercase "T"
-  def time_notrunc do
-    hour() |> optional(minute() |> optional(second())) |> optional(zone())
-  end
-
-  def time_complete do
-    hour() |> concat(minute()) |> concat(second()) |> optional(zone())
-  end
-
-  def time_designator do
-    ascii_char([?T])
-  end
-
-  #      date-time = date-noreduc  time-designator time-notrunc
-  #      timestamp = date-complete time-designator time-complete
-  def date_time do
-    date_noreduc() |> ignore(time_designator()) |> concat(time_notrunc())
-  end
-
-  def timestamp do
-    date_complete() |> ignore(time_designator()) |> concat(time_complete())
-  end
-
-  #      date-and-or-time = date-time / date / time-designator time
-  def date_and_or_time do
-    choice([
-      date_time(),
-      date(),
-      ignore(time_designator()) |> concat(time())
-    ])
-  end
-
-  def pid do
-    digit() |> optional(period() |> concat(digit()))
-  end
-
-  def type_code do
-    choice([
-      anycase_string("work"),
-      anycase_string("home"),
-      anycase_string("pref"),
-      anycase_string("jpeg"),
-      adr_type(),
-      tel_type(),
-      related_type(),
-      x_name(),
-
-      # Non-standard, lenient parse
-      alphabetic()
-    ])
-    |> reduce({Enum, :map, [&String.downcase/1]})
-    |> label("a valid type")
-  end
-
-  def mediatype do
-    alphanum_and_dash()
-    |> ascii_string([?/], min: 1)
-    |> concat(alphanum_and_dash())
+  #    x-name = "x-" 1*(ALPHA / DIGIT / "-")
+  #      ; Names that begin with "x-" or "X-" are
+  #      ; reserved for experimental use, not intended for released
+  #      ; products, or for use in bilateral agreements.
+  defparsec(
+    :x_name_parsec,
+    ascii_string([?x, ?X], min: 1)
+    |> ascii_string([?-], min: 1)
+    |> concat(@alphanum_and_dash_c)
     |> reduce({Enum, :join, []})
-    |> label("a valid mediatype")
-  end
+    |> label("an x- prefixed token"),
+    export_combinator: true
+  )
 
-  def attribute_list do
-    ignore(semicolon())
-    |> concat(alphanumeric())
-    |> ignore(equals())
-    |> concat(alphanumeric())
-    |> reduce(:tuplize)
-    |> repeat
-  end
-
-  def tuplize([key, value]) do
-    {key, value}
-  end
-
-  def adr_type do
+  # adr_type
+  defparsec(
+    :adr_type_parsec,
     choice([
       anycase_string("postal"),
       anycase_string("parcel"),
       anycase_string("internet")
     ])
-    |> label("a valid address type")
-  end
+    |> label("a valid address type"),
+    export_combinator: true
+  )
 
-  def related_type do
+  # related_type
+  defparsec(
+    :related_type_parsec,
     choice([
       anycase_string("contact"),
       anycase_string("acquaintance"),
@@ -221,64 +175,130 @@ defmodule VCard.Parser.Types do
       anycase_string("agent"),
       anycase_string("emergency")
     ])
-    |> label("a valid related type")
-  end
+    |> label("a valid related type"),
+    export_combinator: true
+  )
 
-  def tel_type do
+  # tel_type
+  defparsec(
+    :tel_type_parsec,
     choice([
-      anycase_string("text"),
-      anycase_string("voice"),
-      anycase_string("fax"),
-      anycase_string("cell"),
-      anycase_string("video"),
-      anycase_string("pager"),
-      anycase_string("textphone"),
-      anycase_string("msg"),
-      anycase_string("iphone"),
-      anycase_string("main"),
-      anycase_string("other"),
-      x_name()
+      ci_string("text"),
+      ci_string("voice"),
+      ci_string("fax"),
+      ci_string("cell"),
+      ci_string("video"),
+      ci_string("pager"),
+      ci_string("textphone"),
+      ci_string("msg"),
+      ci_string("iphone"),
+      ci_string("main"),
+      ci_string("other"),
+      parsec({__MODULE__, :x_name_parsec})
     ])
-    |> label("a valid tel type")
-  end
+    |> label("a valid tel type"),
+    export_combinator: true
+  )
+
+  # type_code
+  defparsec(
+    :type_code_parsec,
+    choice([
+      anycase_string("work"),
+      anycase_string("home"),
+      anycase_string("pref"),
+      anycase_string("jpeg"),
+      parsec({__MODULE__, :adr_type_parsec}),
+      parsec({__MODULE__, :tel_type_parsec}),
+      parsec({__MODULE__, :related_type_parsec}),
+      parsec({__MODULE__, :x_name_parsec}),
+      @alphabetic_c
+    ])
+    |> reduce({Enum, :map, [&String.downcase/1]})
+    |> label("a valid type"),
+    export_combinator: true
+  )
+
+  # mediatype
+  defparsec(
+    :mediatype_parsec,
+    @alphanum_and_dash_c
+    |> ascii_string([?/], min: 1)
+    |> concat(@alphanum_and_dash_c)
+    |> reduce({Enum, :join, []})
+    |> label("a valid mediatype"),
+    export_combinator: true
+  )
+
+  # attribute_list
+  defparsec(
+    :attribute_list_parsec,
+    ignore(@semicolon_c)
+    |> concat(@alphanumeric_c)
+    |> ignore(@equals_c)
+    |> concat(@alphanumeric_c)
+    |> reduce(:tuplize)
+    |> repeat,
+    export_combinator: true
+  )
 
   @unreserved [?0..?9, ?a..?z, ?A..?Z, ?-, ?., ?_, ?~]
   @reserved [?%, ?#, ?/, ?%, ?@, ?:, ??]
   @subdelims [?!, ?$, ?&, ?', ?(, ?), ?*, ?+, ?;, ?,, ?=]
 
-  def scheme do
+  # uri
+  defparsec(
+    :uri_parsec,
     ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-], min: 1)
     |> label("a URI scheme")
-  end
-
-  def uri do
-    scheme()
-    |> ignore(choice([colon(), ascii_char([?\\]) |> concat(colon())]))
+    |> ignore(
+      choice([
+        ascii_char([?:]) |> label("a colon"),
+        ascii_char([?\\]) |> concat(ascii_char([?:]) |> label("a colon"))
+      ])
+    )
     |> ascii_string(@unreserved ++ @reserved ++ @subdelims, min: 1)
     |> reduce(:tag_uri)
-    |> label("a URI")
+    |> label("a URI"),
+    export_combinator: true
+  )
+
+  def tuplize([key, value]) do
+    {key, value}
   end
 
   def tag_uri([scheme, location]) do
     {scheme, location}
   end
 
-  #
-  #    iana-token = 1*(ALPHA / DIGIT / "-")
-  #      ; identifier registered with IANA
-  def iana_token do
-    alphanum_and_dash()
+  def calculate_direction(rest, [{:minute, minutes}, {:hour, hours}, ?+], context, _, _) do
+    {rest, [{:tz_minute_offset, minutes}, {:tz_hour_offset, hours}], context}
   end
 
-  #    x-name = "x-" 1*(ALPHA / DIGIT / "-")
-  #      ; Names that begin with "x-" or "X-" are
-  #      ; reserved for experimental use, not intended for released
-  #      ; products, or for use in bilateral agreements.
-  def x_name do
-    ascii_string([?x, ?X], min: 1)
-    |> ascii_string([?-], min: 1)
-    |> concat(alphanum_and_dash())
-    |> reduce({Enum, :join, []})
-    |> label("an x- prefixed token")
+  def calculate_direction(rest, [{:minute, minutes}, {:hour, hours}, ?-], context, _, _) do
+    {rest, [{:tz_minute_offset, minutes}, {:tz_hour_offset, hours * -1}], context}
   end
+
+  # ---- Legacy wrappers ----
+  # These return parsec refs so callers get runtime calls instead of inlining.
+  def utc_offset, do: parsec({__MODULE__, :utc_offset_parsec})
+  def zone, do: choice([utc_designator(), utc_offset()])
+  def date, do: parsec({__MODULE__, :date_parsec})
+  def date_noreduc, do: @date_noreduc_c
+  def date_complete, do: @date_complete_c
+  def time, do: @time_c
+  def time_notrunc, do: @time_notrunc_c
+  def time_complete, do: @time_complete_c
+  def date_time, do: @date_time_c
+  def timestamp, do: parsec({__MODULE__, :timestamp_parsec})
+  def date_and_or_time, do: parsec({__MODULE__, :date_and_or_time_parsec})
+  def pid, do: parsec({__MODULE__, :pid_parsec})
+  def x_name, do: parsec({__MODULE__, :x_name_parsec})
+  def adr_type, do: parsec({__MODULE__, :adr_type_parsec})
+  def related_type, do: parsec({__MODULE__, :related_type_parsec})
+  def tel_type, do: parsec({__MODULE__, :tel_type_parsec})
+  def type_code, do: parsec({__MODULE__, :type_code_parsec})
+  def mediatype, do: parsec({__MODULE__, :mediatype_parsec})
+  def attribute_list, do: parsec({__MODULE__, :attribute_list_parsec})
+  def uri, do: parsec({__MODULE__, :uri_parsec})
 end

@@ -30,9 +30,6 @@ defmodule VCard.Parser do
 
   # parsec:VCard.Parser
 
-  import NimbleParsec
-  import VCard.Parser.{Grammar, Core, Params, Types}
-
   defparsec(
     :parse_vcard,
     begin_line()

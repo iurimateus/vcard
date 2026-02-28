@@ -25,7 +25,7 @@ defmodule VCard do
   the param spec. Params will be checked
   in `params` and `group`.
   """
-  def get(vcard, key, params) do
+  def get(_vcard, _key, _params) do
   end
 
   @spec get_all(t, key) :: [value]

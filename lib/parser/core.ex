@@ -68,15 +68,15 @@ defmodule VCard.Parser.Core do
     |> label("an alphanumeric character")
   end
 
-  # def anycase_string(string) do
-  #   down = String.downcase(string)
-  #   up = String.upcase(string)
-  #
-  #   choice([
-  #     string(down),
-  #     string(up)
-  #   ])
-  # end
+  def ci_string(str) do
+    down = String.downcase(str)
+    up = String.upcase(str)
+
+    choice([
+      string(down),
+      string(up)
+    ])
+  end
 
   def anycase_string(string) do
     string
@@ -113,60 +113,62 @@ defmodule VCard.Parser.Core do
     [c, c + 32]
   end
 
-  def quoted_string do
-    ignore(ascii_char([?"]))
-    |> concat(qsafe_string())
-    |> ignore(ascii_char([?"]))
-  end
+  # ---- Pre-compiled combinators ----
+  # These are compiled once and referenced via parsec({VCard.Parser.Core, :name})
+  # to avoid re-inlining at every use site.
+  #
+  # NOTE: defparsec runs at module scope (compile time), so we inline the
+  # NimbleParsec combinator expressions directly rather than calling this
+  # module's own `def` functions (which aren't available yet).
+
+  #    NON-ASCII = UTF8-2 / UTF8-3 / UTF8-4
+  defparsec(
+    :non_ascii_parsec,
+    ignore(string("<"))
+    |> ignore(ascii_char([?U, ?u]))
+    |> ignore(string("+"))
+    |> concat(ascii_string([?a..?f, ?A..?F, ?0..?9], min: 1))
+    |> ignore(string(">"))
+    |> reduce(:convert_utf8),
+    export_combinator: true
+  )
 
   #    SAFE-CHAR = WSP / "!" / %x23-39 / %x3C-7E / NON-ASCII
   #      ; Any character except CTLs, DQUOTE, ";", ":"
   #      ; ALSO ALLOW &NBSP 0xa0 since Apple Contacts generates it
-  def safe_string do
+  defparsec(
+    :safe_string_parsec,
     choice([
-      non_ascii(),
+      parsec({__MODULE__, :non_ascii_parsec}),
       utf8_char([160]),
       ascii_char([0x20, 0x09, ?!, 0x23..0x39, 0x3C..0x7E])
     ])
     |> times(min: 1)
-    |> reduce({List, :to_string, []})
-  end
+    |> reduce({List, :to_string, []}),
+    export_combinator: true
+  )
 
   #    QSAFE-CHAR = WSP / "!" / %x23-7E / NON-ASCII
   #      ; Any character except CTLs, DQUOTE
-  def qsafe_string do
+  #      ; ALSO ALLOW &NBSP 0xa0 since Apple Contacts generates it
+  defparsec(
+    :qsafe_string_parsec,
     choice([
-      non_ascii(),
+      parsec({__MODULE__, :non_ascii_parsec}),
       ascii_char([0x20, 0x09, ?!, 0x23..0x7E])
     ])
     |> times(min: 1)
-    |> reduce({List, :to_string, []})
-  end
+    |> reduce({List, :to_string, []}),
+    export_combinator: true
+  )
 
-  #    NON-ASCII = UTF8-2 / UTF8-3 / UTF8-4
-  #      ; UTF8-{2,3,4} are defined in [RFC3629]
-  def non_ascii do
-    ignore(string("<"))
-    |> ignore(ascii_char([?U, ?u]))
-    |> ignore(string("+"))
-    |> concat(hex_string())
-    |> ignore(string(">"))
-    |> reduce(:convert_utf8)
-  end
-
-  def convert_utf8(args) do
-    args
-    |> Enum.map(fn x ->
-      {y, ""} = Integer.parse(x, 16)
-      y
-    end)
-    |> List.to_string()
-  end
-
-  def text_list do
-    text()
-    |> repeat(ignore(comma()) |> concat(text()))
-  end
+  defparsec(
+    :quoted_string_parsec,
+    ignore(ascii_char([?"]))
+    |> concat(parsec({__MODULE__, :qsafe_string_parsec}))
+    |> ignore(ascii_char([?"])),
+    export_combinator: true
+  )
 
   # text = *TEXT-CHAR
   #
@@ -177,24 +179,37 @@ defmodule VCard.Parser.Core do
   @escaped_char [?\\, ?,, 0x0D]
   @others [160]
 
-  def text do
+  defparsec(
+    :text_parsec,
     choice([
-      non_ascii(),
+      parsec({__MODULE__, :non_ascii_parsec}),
       utf8_char(@others),
       ascii_char([?\\]) |> ascii_char(@escaped_char ++ @unescaped_char),
       ascii_char(@unescaped_char)
     ])
     |> repeat
     |> reduce({List, :to_string, []})
-    |> post_traverse(:unescape)
-  end
+    |> post_traverse(:unescape),
+    export_combinator: true
+  )
+
+  defparsec(
+    :text_list_parsec,
+    parsec({__MODULE__, :text_parsec})
+    |> repeat(
+      ignore(ascii_char([?,]) |> label("a comma"))
+      |> concat(parsec({__MODULE__, :text_parsec}))
+    ),
+    export_combinator: true
+  )
 
   # component = "\\" / "\," / "\;" / "\n" / WSP / NON-ASCII
   #           / %x21-2B / %x2D-3A / %x3C-5B / %x5D-7E
   @unescaped_component [0x20, 0x09, 0x21..0x2B, 0x2D..0x3A, 0x3C..0x5B, 0x5D..0x7E]
   @escaped_component [?\\, ?,, ?;, 0x0D]
 
-  def component do
+  defparsec(
+    :component_parsec,
     choice([
       utf8_char(@others),
       ascii_char([?\\]) |> ascii_char(@escaped_component),
@@ -203,21 +218,37 @@ defmodule VCard.Parser.Core do
     |> repeat
     |> reduce({List, :to_string, []})
     |> post_traverse(:unescape)
-    |> label("bad component")
+    |> label("bad component"),
+    export_combinator: true
+  )
+
+  # list-component = component *(";" component)
+  defparsec(
+    :list_component_parsec,
+    parsec({__MODULE__, :component_parsec})
+    |> repeat(
+      ignore(ascii_char([?;]) |> label("a semicolon"))
+      |> optional(parsec({__MODULE__, :component_parsec}))
+    ),
+    export_combinator: true
+  )
+
+  # ---- Legacy wrappers ----
+  def quoted_string, do: parsec({__MODULE__, :quoted_string_parsec})
+  def safe_string, do: parsec({__MODULE__, :safe_string_parsec})
+  def qsafe_string, do: parsec({__MODULE__, :qsafe_string_parsec})
+  def non_ascii, do: parsec({__MODULE__, :non_ascii_parsec})
+  def text, do: parsec({__MODULE__, :text_parsec})
+  def text_list, do: parsec({__MODULE__, :text_list_parsec})
+  def component, do: parsec({__MODULE__, :component_parsec})
+  def list_component, do: parsec({__MODULE__, :list_component_parsec})
+
+  def default_nil(rest, context, _, _) do
+    {rest, [nil], context}
   end
 
-  # list-component = component *("," component)
-  def list_component do
-    component()
-    |> repeat(ignore(semicolon()) |> optional(component()))
-  end
-
-  def default_nil(_, context, _, _) do
-    {[nil], context}
-  end
-
-  def unescape(_rest, args, context, _, _) do
-    {unescape(args), context}
+  def unescape(rest, args, context, _, _) do
+    {rest, unescape(args), context}
   end
 
   def unescape(values) when is_list(values) do
@@ -244,5 +275,14 @@ defmodule VCard.Parser.Core do
 
   def unescape(values) do
     values
+  end
+
+  def convert_utf8(args) do
+    args
+    |> Enum.map(fn x ->
+      {y, ""} = Integer.parse(x, 16)
+      y
+    end)
+    |> List.to_string()
   end
 end

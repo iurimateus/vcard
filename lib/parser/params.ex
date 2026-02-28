@@ -1,6 +1,5 @@
 defmodule VCard.Parser.Params do
   import NimbleParsec
-  import VCard.Parser.ParamValues
   import VCard.Parser.Core
   import VCard.Parser.Types
 
@@ -20,6 +19,165 @@ defmodule VCard.Parser.Params do
     :encoding,
     :any
   ]
+
+  # Pre-compiled param name matchers to avoid re-inlining anycase_string
+  defparsec(:value_name, anycase_string("value"), export_combinator: true)
+  defparsec(:pid_name, anycase_string("pid"), export_combinator: true)
+  defparsec(:pref_name, anycase_string("pref"), export_combinator: true)
+  defparsec(:altid_name, anycase_string("altid"), export_combinator: true)
+  defparsec(:mediatype_name, anycase_string("mediatype"), export_combinator: true)
+  defparsec(:type_name, anycase_string("type"), export_combinator: true)
+  defparsec(:language_name, anycase_string("language"), export_combinator: true)
+  defparsec(:sort_as_name, anycase_string("sort_as"), export_combinator: true)
+  defparsec(:encoding_name, anycase_string("encoding"), export_combinator: true)
+  defparsec(:calscale_name, anycase_string("calscale"), export_combinator: true)
+  defparsec(:label_name, anycase_string("label"), export_combinator: true)
+  defparsec(:geo_name, anycase_string("geo"), export_combinator: true)
+  defparsec(:tz_name, anycase_string("tz"), export_combinator: true)
+
+  # ---- Pre-compiled full param combinators ----
+  # These combine param name + value parsing for each param type.
+  # Using parsec refs avoids re-inlining the entire param value logic.
+
+  defparsec(
+    :value_param,
+    parsec({__MODULE__, :value_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :value_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :value_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :pref_param,
+    parsec({__MODULE__, :pref_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :pref_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :pref_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :pid_param,
+    parsec({__MODULE__, :pid_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :pid_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :pid_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :altid_param,
+    parsec({__MODULE__, :altid_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :any_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :any_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :mediatype_param,
+    parsec({__MODULE__, :mediatype_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :mediatype_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :mediatype_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :type_param,
+    parsec({__MODULE__, :type_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :type_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :type_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :language_param,
+    parsec({__MODULE__, :language_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :any_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :any_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :sort_as_param,
+    parsec({__MODULE__, :sort_as_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :sort_as_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :sort_as_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :encoding_param,
+    parsec({__MODULE__, :encoding_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :encoding_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :encoding_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :calscale_param,
+    parsec({__MODULE__, :calscale_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :calscale_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :calscale_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :label_param,
+    parsec({__MODULE__, :label_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :any_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :any_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :geo_param,
+    parsec({__MODULE__, :geo_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :geo_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :geo_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :tz_param,
+    parsec({__MODULE__, :tz_name})
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :tz_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :tz_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
+
+  defparsec(
+    :any_param,
+    x_name()
+    |> ignore(equals())
+    |> concat(parsec({VCard.Parser.ParamValues, :any_pv}))
+    |> repeat(ignore(comma()) |> concat(parsec({VCard.Parser.ParamValues, :any_pv})))
+    |> reduce(:reduce_param),
+    export_combinator: true
+  )
 
   # Generates a `choice/2` parser for the desired
   # parameters
@@ -48,70 +206,42 @@ defmodule VCard.Parser.Params do
   end
 
   def param(valid_param) when is_atom(valid_param) do
-    apply(__MODULE__, valid_param, [])
-    |> ignore(equals())
-    |> concat(param_value(valid_param))
-    |> repeat(ignore(comma() |> concat(param_value(valid_param))))
-    |> reduce(:reduce_param)
+    case valid_param do
+      :value -> parsec({__MODULE__, :value_param})
+      :pref -> parsec({__MODULE__, :pref_param})
+      :pid -> parsec({__MODULE__, :pid_param})
+      :altid -> parsec({__MODULE__, :altid_param})
+      :mediatype -> parsec({__MODULE__, :mediatype_param})
+      :type -> parsec({__MODULE__, :type_param})
+      :language -> parsec({__MODULE__, :language_param})
+      :sort_as -> parsec({__MODULE__, :sort_as_param})
+      :encoding -> parsec({__MODULE__, :encoding_param})
+      :calscale -> parsec({__MODULE__, :calscale_param})
+      :label -> parsec({__MODULE__, :label_param})
+      :geo -> parsec({__MODULE__, :geo_param})
+      :tz -> parsec({__MODULE__, :tz_param})
+      :any -> parsec({__MODULE__, :any_param})
+      _ -> parsec({__MODULE__, :any_param})
+    end
   end
 
-  # Here follows the list of valid parameters
-  # noting that not all properties support all
-  # parameters
-  def value do
-    anycase_string("value")
-  end
-
-  def pid do
-    anycase_string("pid")
-  end
-
-  def pref do
-    anycase_string("pref")
-  end
-
-  def altid do
-    anycase_string("altid")
-  end
-
-  def mediatype do
-    anycase_string("mediatype")
-  end
-
-  def type do
-    anycase_string("type")
-  end
-
-  def language do
-    anycase_string("language")
-  end
-
-  def sort_as do
-    anycase_string("sort_as")
-  end
-
-  def encoding do
-    anycase_string("encoding")
-  end
-
-  def calscale do
-    anycase_string("calscale")
-  end
-
-  def label do
-    anycase_string("label")
-  end
-
-  def geo do
-    anycase_string("geo")
-  end
-
-  def tz do
-    anycase_string("tz")
-  end
+  # Param name functions now delegate to pre-compiled parsecs
+  def value, do: parsec({__MODULE__, :value_name})
+  def pid, do: parsec({__MODULE__, :pid_name})
+  def pref, do: parsec({__MODULE__, :pref_name})
+  def altid, do: parsec({__MODULE__, :altid_name})
+  def mediatype, do: parsec({__MODULE__, :mediatype_name})
+  def type, do: parsec({__MODULE__, :type_name})
+  def language, do: parsec({__MODULE__, :language_name})
+  def sort_as, do: parsec({__MODULE__, :sort_as_name})
+  def encoding, do: parsec({__MODULE__, :encoding_name})
+  def calscale, do: parsec({__MODULE__, :calscale_name})
+  def label, do: parsec({__MODULE__, :label_name})
+  def geo, do: parsec({__MODULE__, :geo_name})
+  def tz, do: parsec({__MODULE__, :tz_name})
 
   def any do
-    x_name()
+    parsec({__MODULE__, :any_param})
   end
 
   def group_and_downcase_params(list) do

@@ -1,7 +1,129 @@
 defmodule VCard.Parser.ParamValues do
   import NimbleParsec
   import VCard.Parser.Core
-  import VCard.Parser.Types
+
+  # ---- Pre-compiled param value parsecs ----
+  # These are compiled once and referenced via parsec({VCard.Parser.ParamValues, :name_pv})
+  # to avoid re-inlining at every use site.
+  #
+  # NOTE: defparsec runs at module scope (compile time), so we inline
+  # NimbleParsec combinator expressions directly rather than calling this
+  # module's own `def` functions (which aren't available yet).
+  # We CAN use imported functions from Core and Types (already compiled).
+
+  defparsec(
+    :value_pv,
+    choice([
+      ci_string("text"),
+      ci_string("uri"),
+      ci_string("date"),
+      ci_string("time"),
+      ci_string("date-time"),
+      ci_string("date-and-or-time"),
+      ci_string("timestampe"),
+      ci_string("boolean"),
+      ci_string("integer"),
+      ci_string("float"),
+      ci_string("utc-offset"),
+      ci_string("language-tag"),
+      ci_string("x-name"),
+      ci_string("iana-token")
+    ]),
+    export_combinator: true
+  )
+
+  @integer_1_to_3_c ascii_string([?0..?9], min: 1, max: 3)
+
+  defparsec(
+    :pref_pv,
+    @integer_1_to_3_c |> label("an integer between 1 and 100"),
+    export_combinator: true
+  )
+
+  @comma_c ascii_char([?,])
+  @dquote_c ascii_char([?"])
+
+  defparsec(
+    :pid_pv,
+    parsec({VCard.Parser.Types, :pid_parsec})
+    |> repeat(ignore(@comma_c) |> concat(parsec({VCard.Parser.Types, :pid_parsec})))
+    |> label("a comma-separated list of PID's"),
+    export_combinator: true
+  )
+
+  defparsec(
+    :type_pv,
+    optional(ignore(@dquote_c))
+    |> concat(parsec({VCard.Parser.Types, :type_code_parsec}))
+    |> repeat(ignore(@comma_c) |> concat(parsec({VCard.Parser.Types, :type_code_parsec})))
+    |> optional(ignore(@dquote_c)),
+    export_combinator: true
+  )
+
+  defparsec(
+    :mediatype_pv,
+    parsec({VCard.Parser.Types, :mediatype_parsec})
+    |> concat(parsec({VCard.Parser.Types, :attribute_list_parsec})),
+    export_combinator: true
+  )
+
+  defparsec(
+    :calscale_pv,
+    choice([
+      ci_string("gregorian"),
+      parsec({VCard.Parser.Types, :x_name_parsec}),
+      ascii_string([?a..?z, ?A..?Z], min: 1)
+    ]),
+    export_combinator: true
+  )
+
+  defparsec(
+    :sort_as_pv,
+    parsec({VCard.Parser.Core, :text_list_parsec}),
+    export_combinator: true
+  )
+
+  defparsec(
+    :geo_pv,
+    ignore(@dquote_c) |> concat(parsec({VCard.Parser.Types, :uri_parsec})) |> ignore(@dquote_c),
+    export_combinator: true
+  )
+
+  defparsec(
+    :tz_pv,
+    choice([
+      ignore(@dquote_c)
+      |> concat(parsec({VCard.Parser.Types, :utc_offset_parsec}))
+      |> ignore(@dquote_c),
+      parsec({VCard.Parser.Core, :text_parsec})
+    ]),
+    export_combinator: true
+  )
+
+  @alphanumeric_c ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
+
+  defparsec(
+    :encoding_pv,
+    @alphanumeric_c,
+    export_combinator: true
+  )
+
+  defparsec(
+    :uri_pv,
+    parsec({VCard.Parser.Types, :uri_parsec}),
+    export_combinator: true
+  )
+
+  defparsec(
+    :any_pv,
+    choice([
+      parsec({VCard.Parser.Core, :quoted_string_parsec}),
+      parsec({VCard.Parser.Core, :non_ascii_parsec}),
+      parsec({VCard.Parser.Core, :safe_string_parsec})
+    ])
+    |> repeat,
+    export_combinator: true
+  )
 
   # 5.1.  LANGUAGE
   #
@@ -20,7 +142,7 @@ defmodule VCard.Parser.ParamValues do
   #            language-param = "LANGUAGE=" Language-Tag
   #              ; Language-Tag is defined in section 2.1 of RFC 5646
   def param_value(:language) do
-    param_value(:any)
+    parsec({__MODULE__, :any_pv})
   end
 
   # 5.2.  VALUE
@@ -53,22 +175,7 @@ defmodule VCard.Parser.ParamValues do
   #                 / iana-token  ; registered as described in section 12
   #                 / x-name
   def param_value(:value) do
-    choice([
-      anycase_string("text"),
-      anycase_string("uri"),
-      anycase_string("date"),
-      anycase_string("time"),
-      anycase_string("date-time"),
-      anycase_string("date-and-or-time"),
-      anycase_string("timestampe"),
-      anycase_string("boolean"),
-      anycase_string("integer"),
-      anycase_string("float"),
-      anycase_string("utc-offset"),
-      anycase_string("language-tag"),
-      anycase_string("x-name"),
-      anycase_string("iana-token")
-    ])
+    parsec({__MODULE__, :value_pv})
   end
 
   # 5.3.  PREF
@@ -95,8 +202,7 @@ defmodule VCard.Parser.ParamValues do
   #            pref-param = "PREF=" (1*2DIGIT / "100")
   #                                 ; An integer between 1 and 100.
   def param_value(:pref) do
-    integer(min: 1, max: 3)
-    |> label("an integer between 1 and 100")
+    parsec({__MODULE__, :pref_pv})
   end
 
   # 5.4.  ALTID
@@ -168,7 +274,7 @@ defmodule VCard.Parser.ParamValues do
   #
   #            altid-param = "ALTID=" param-value
   def param_value(:altid) do
-    param_value(:any)
+    parsec({__MODULE__, :any_pv})
   end
 
   # 5.5.  PID
@@ -188,9 +294,7 @@ defmodule VCard.Parser.ParamValues do
   #            pid-param = "PID=" pid-value *("," pid-value)
   #            pid-value = 1*DIGIT ["." 1*DIGIT]
   def param_value(:pid) do
-    pid()
-    |> repeat(ignore(comma()) |> concat(pid()))
-    |> label("a comma-separated list of PID's")
+    parsec({__MODULE__, :pid_pv})
   end
 
   # 5.6.  TYPE
@@ -221,10 +325,7 @@ defmodule VCard.Parser.ParamValues do
   #                       / type-param-related / iana-token / x-name
   #              ; This is further defined in individual property sections.
   def param_value(:type) do
-    optional(ignore(dquote()))
-    |> concat(type_code())
-    |> repeat(ignore(comma()) |> concat(type_code()))
-    |> optional(ignore(dquote()))
+    parsec({__MODULE__, :type_pv})
   end
 
   # 5.7.  MEDIATYPE
@@ -247,8 +348,7 @@ defmodule VCard.Parser.ParamValues do
   #        ; "attribute" and "value" are from [RFC2045]
   #        ; "type-name" and "subtype-name" are from [RFC4288]
   def param_value(:mediatype) do
-    mediatype()
-    |> concat(attribute_list())
+    parsec({__MODULE__, :mediatype_pv})
   end
 
   # 5.8.  CALSCALE
@@ -259,7 +359,6 @@ defmodule VCard.Parser.ParamValues do
   #    only value specified by iCalendar is "gregorian", which stands for
   #    the Gregorian system.  It is the default when the parameter is
   #    absent.  Additional values may be defined in extension documents and
-  #
   #    registered with IANA (see Section 10.3.4).  A vCard implementation
   #    MUST ignore properties with a CALSCALE parameter value that it does
   #    not understand.
@@ -270,13 +369,7 @@ defmodule VCard.Parser.ParamValues do
   #
   #            calscale-value = "gregorian" / iana-token / x-name
   def param_value(:calscale) do
-    choice([
-      anycase_string("gregorian"),
-      x_name(),
-
-      # lenient parse
-      alphabetic()
-    ])
+    parsec({__MODULE__, :calscale_pv})
   end
 
   # 5.9.  SORT-AS
@@ -337,20 +430,20 @@ defmodule VCard.Parser.ParamValues do
   #            Rene van der Harten
   #            Robert Pau Shou Chang
   def param_value(:sort_as) do
-    text_list()
+    parsec({__MODULE__, :sort_as_pv})
   end
 
   # 5.10.  GEO
   #
   #    The GEO parameter can be used to indicate global positioning
   #    information that is specific to an address.  Its value is the same as
-  #    that of the GEO property (see Section 6.5.2).
+  #    that of GEO property (see Section 6.5.2).
   #
   #    ABNF:
   #
   #      geo-parameter = "GEO=" DQUOTE URI DQUOTE
   def param_value(:geo) do
-    ignore(dquote()) |> concat(uri()) |> ignore(dquote())
+    parsec({__MODULE__, :geo_pv})
   end
 
   # 5.11.  TZ
@@ -363,28 +456,20 @@ defmodule VCard.Parser.ParamValues do
   #
   #      tz-parameter = "TZ=" (param-value / DQUOTE URI DQUOTE)
   def param_value(:tz) do
-    choice([
-      ignore(dquote()) |> concat(utc_offset()) |> ignore(dquote()),
-      text()
-    ])
+    parsec({__MODULE__, :tz_pv})
   end
 
   def param_value(:uri) do
-    uri()
+    parsec({__MODULE__, :uri_pv})
   end
 
   def param_value(:encoding) do
-    alphanumeric()
+    parsec({__MODULE__, :encoding_pv})
   end
 
   #    Default parameter type
   #    param-value = *SAFE-CHAR / DQUOTE *QSAFE-CHAR DQUOTE
   def param_value(_) do
-    choice([
-      quoted_string(),
-      non_ascii(),
-      safe_string()
-    ])
-    |> repeat
+    parsec({__MODULE__, :any_pv})
   end
 end
