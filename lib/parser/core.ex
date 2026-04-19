@@ -122,6 +122,8 @@ defmodule VCard.Parser.Core do
   # module's own `def` functions (which aren't available yet).
 
   #    NON-ASCII = UTF8-2 / UTF8-3 / UTF8-4
+  # Legacy NON-ASCII token support. Raw UTF-8 codepoints are accepted by the
+  # text/component parsers below via @raw_utf8_char.
   defparsec(
     :non_ascii_parsec,
     ignore(string("<"))
@@ -177,13 +179,23 @@ defmodule VCard.Parser.Core do
   #    ; Backslashes, commas, and newlines must be encoded.
   @unescaped_char [0x20, 0x09, 0x21..0x2B, 0x2D..0x5B, 0x5D..0x7E]
   @escaped_char [?\\, ?,, 0x0D]
-  @others [160]
+  # Allow only non-ASCII UTF-8 codepoints here.
+  #
+  # 0x80..0x10FFFF covers characters above the ASCII range, including NBSP and
+  # letters such as "ã". ASCII bytes (0x00..0x7F) are still constrained by the
+  # explicit RFC-derived ascii_char(...) ranges below, so delimiters and
+  # control characters such as ",", ";", ":", "\\", CR, and LF do not become
+  # accidentally valid just because we accept raw UTF-8 input. This parser is
+  # intentionally broad for non-ASCII codepoints; it preserves the ASCII
+  # rules without trying to blacklist every non-ASCII control or format
+  # character.
+  @raw_utf8_char [0x80..0x10FFFF]
 
   defparsec(
     :text_parsec,
     choice([
       parsec({__MODULE__, :non_ascii_parsec}),
-      utf8_char(@others),
+      utf8_char(@raw_utf8_char),
       ascii_char([?\\]) |> ascii_char(@escaped_char ++ @unescaped_char),
       ascii_char(@unescaped_char)
     ])
@@ -211,7 +223,8 @@ defmodule VCard.Parser.Core do
   defparsec(
     :component_parsec,
     choice([
-      utf8_char(@others),
+      parsec({__MODULE__, :non_ascii_parsec}),
+      utf8_char(@raw_utf8_char),
       ascii_char([?\\]) |> ascii_char(@escaped_component),
       ascii_char(@unescaped_component)
     ])
